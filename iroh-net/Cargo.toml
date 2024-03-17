@@ -47,7 +47,7 @@ quinn-udp = "0.4"
 rand = "0.8"
 rand_core = "0.6.4"
 rcgen = "0.11"
-reqwest = { version = "0.11.19", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.11.26", default-features = false, features = ["rustls-tls"] }
 ring = "0.17"
 rustls = { version = "0.21", default-features = false, features = ["dangerous_configuration"] }
 serde = { version = "1", features = ["derive", "rc"] }
