@@ -62,7 +62,7 @@ thiserror = "1"
 time = "0.3.20"
 tokio = { version = "1", features = ["io-util", "macros", "sync", "rt", "net", "fs", "io-std", "signal", "process"] }
 tokio-rustls = { version = "0.24" }
-tokio-rustls-acme = { version = "0.2" }
+tokio-rustls-acme = { git = "https://github.com/3exp8/tokio-rustls-acme.git",branch = "main" }
 tokio-util = { version = "0.7", features = ["io-util", "io", "codec"] }
 tracing = "0.1"
 hickory-resolver = "0.24.0"
