@@ -2463,7 +2463,7 @@ dependencies = [
  "hyper-util",
  "once_cell",
  "prometheus-client",
- "reqwest 0.11.26 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest 0.11.26 (git+https://github.com/3exp8/reqwest.git?branch=master)",
  "serde",
  "struct_iterable",
  "time",
