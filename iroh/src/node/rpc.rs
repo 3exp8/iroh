@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::io;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use futures::{Future, FutureExt, Stream, StreamExt};
@@ -15,7 +16,7 @@ use iroh_bytes::BlobFormat;
 use iroh_bytes::{
     hashseq::parse_hash_seq,
     provider::AddProgress,
-    store::{PossiblyPartialEntry, Store as BaoStore, ValidateProgress},
+    store::{Store as BaoStore, ValidateProgress},
     util::progress::FlumeProgressSender,
     HashAndFormat,
 };
@@ -28,7 +29,6 @@ use tokio::sync::mpsc;
 use tokio_util::task::LocalPoolHandle;
 use tracing::{debug, info};
 
-use crate::node::{Event, RPC_BLOB_GET_CHANNEL_CAP, RPC_BLOB_GET_CHUNK_SIZE};
 use crate::rpc_protocol::{
     BlobAddPathRequest, BlobAddPathResponse, BlobAddStreamRequest, BlobAddStreamResponse,
     BlobAddStreamUpdate, BlobDeleteBlobRequest, BlobDownloadRequest, BlobDownloadResponse,
@@ -44,7 +44,13 @@ use crate::rpc_protocol::{
     ProviderService, SetTagOption,
 };
 
-use super::{NodeInner, HEALTH_POLL_WAIT};
+use super::{Event, NodeInner};
+
+const HEALTH_POLL_WAIT: Duration = Duration::from_secs(1);
+/// Chunk size for getting blobs over RPC
+const RPC_BLOB_GET_CHUNK_SIZE: usize = 1024 * 64;
+/// Channel cap for getting blobs over RPC
+const RPC_BLOB_GET_CHANNEL_CAP: usize = 2;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Handler<D> {
@@ -241,6 +247,12 @@ impl<D: BaoStore> Handler<D> {
                     })
                     .await
                 }
+                DocGetSyncPeers(msg) => {
+                    chan.rpc(msg, handler, |handler, req| async move {
+                        handler.inner.sync.doc_get_sync_peers(req).await
+                    })
+                    .await
+                }
             }
         });
     }
@@ -273,10 +285,12 @@ impl<D: BaoStore> Handler<D> {
         let db = self.inner.db.clone();
         for hash in db.partial_blobs().await? {
             let hash = hash?;
-            let Ok(PossiblyPartialEntry::Partial(entry)) = db.get_possibly_partial(&hash).await
-            else {
+            let Ok(Some(entry)) = db.get_mut(&hash).await else {
                 continue;
             };
+            if entry.is_complete() {
+                continue;
+            }
             let size = 0;
             let expected_size = entry.size().value();
             co.yield_(Ok(BlobListIncompleteResponse {
@@ -385,13 +399,13 @@ impl<D: BaoStore> Handler<D> {
     /// Invoke validate on the database and stream out the result
     fn blob_validate(
         self,
-        _msg: BlobValidateRequest,
+        msg: BlobValidateRequest,
     ) -> impl Stream<Item = ValidateProgress> + Send + 'static {
         let (tx, rx) = mpsc::channel(1);
         let tx2 = tx.clone();
         let db = self.inner.db.clone();
         tokio::task::spawn(async move {
-            if let Err(e) = db.validate(tx).await {
+            if let Err(e) = db.validate(msg.repair, tx).await {
                 tx2.send(ValidateProgress::Abort(e.into())).await.unwrap();
             }
         });

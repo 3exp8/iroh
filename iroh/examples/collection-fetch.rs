@@ -3,12 +3,11 @@
 //!
 //! This is using an in memory database and a random node id.
 //! Run the `collection-provide` example, which will give you instructions on how to run this example.
-use anyhow::{bail, Context, Result};
-use iroh::{client::BlobDownloadProgress, rpc_protocol::BlobDownloadRequest};
+use anyhow::{bail, ensure, Context, Result};
+use iroh::rpc_protocol::BlobDownloadRequest;
 use iroh_bytes::BlobFormat;
 use std::env;
 use std::str::FromStr;
-use tokio_util::task::LocalPoolHandle;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
 // set the RUST_LOG env var to one of {debug,info,warn} to see logging info
@@ -35,19 +34,8 @@ async fn main() -> Result<()> {
     let ticket =
         iroh::ticket::BlobTicket::from_str(&args[1]).context("failed parsing blob ticket\n\nGet a ticket by running the follow command in a separate terminal:\n\n`cargo run --example collection-provide`")?;
 
-    // create a new, empty in memory database
-    let db = iroh_bytes::store::mem::Store::default();
-    // create an in-memory doc store (not used in the example)
-    let doc_store = iroh_sync::store::memory::Store::default();
-    // create a new iroh runtime with 1 worker thread
-    let lp = LocalPoolHandle::new(1);
     // create a new node
-    let node = iroh::node::Node::builder(db, doc_store)
-        .local_pool(&lp)
-        .spawn()
-        .await?;
-    // create a client that allows us to interact with the running node
-    let client = node.client();
+    let node = iroh::node::Node::memory().spawn().await?;
 
     println!("fetching hash:  {}", ticket.hash());
     println!("node id:        {}", node.node_id());
@@ -87,13 +75,10 @@ async fn main() -> Result<()> {
     };
 
     // `download` returns a stream of `DownloadProgress` events. You can iterate through these updates to get progress on the state of your download.
-    let download_stream = client.blobs.download(req).await?;
+    let download_stream = node.blobs.download(req).await?;
 
-    // You can also use the `BlobDownloadProgress` struct, that has the method `finish` that will poll the `DownloadProgress` stream for you.
-    let outcome = BlobDownloadProgress::new(download_stream)
-        .finish()
-        .await
-        .context("unable to download hash")?;
+    // You can also just `await` the stream, which poll the `DownloadProgress` stream for you.
+    let outcome = download_stream.await.context("unable to download hash")?;
 
     println!(
         "\ndownloaded {} bytes from node {}",
@@ -102,28 +87,27 @@ async fn main() -> Result<()> {
     );
 
     // Get the content we have just fetched from the iroh database.
-    if ticket.format() == BlobFormat::HashSeq {
-        // If the `BlobFormat` is `HashSeq`, then we can assume for the example (and for any `HashSeq` that is derived from any iroh API), that it can be parsed as a `Collection`
-        // A `Collection` is a special `HashSeq`, where we preserve the names of any blobs added to the collection. (We do this by designating the first entry in the `Collection` as meta data.)
-        // To get the content of the collection, we first get the collection from the database using the `blobs` API
-        let collection = client
-            .blobs
-            .get_collection(ticket.hash())
-            .await
-            .context("expect hash with `BlobFormat::HashSeq` to be a collection")?;
-        // Then we iterate through the collection, which gives us the name and hash of each entry in the collection.
-        for (name, hash) in collection.iter() {
-            println!("\nname: {name}, hash: {hash}");
-            // Use the hash of the blob to get the content.
-            let content = client.blobs.read_to_bytes(*hash).await?;
-            println!(
-                "{}",
-                String::from_utf8(content.to_vec())
-                    .context("unable to parse blob as as utf-8 string")?
-            );
-        }
-    } else {
-        bail!("'collection' example expects to fetch a collection, but the ticket indicates a single blob.");
+    ensure!(
+        ticket.format() == BlobFormat::HashSeq,
+        "'collection' example expects to fetch a collection, but the ticket indicates a single blob."
+    );
+
+    // If the `BlobFormat` is `HashSeq`, then we can assume for the example (and for any `HashSeq` that is derived from any iroh API), that it can be parsed as a `Collection`
+    // A `Collection` is a special `HashSeq`, where we preserve the names of any blobs added to the collection. (We do this by designating the first entry in the `Collection` as meta data.)
+    // To get the content of the collection, we first get the collection from the database using the `blobs` API
+    let collection = node
+        .blobs
+        .get_collection(ticket.hash())
+        .await
+        .context("expect hash with `BlobFormat::HashSeq` to be a collection")?;
+
+    // Then we iterate through the collection, which gives us the name and hash of each entry in the collection.
+    for (name, hash) in collection.iter() {
+        println!("\nname: {name}, hash: {hash}");
+        // Use the hash of the blob to get the content.
+        let content = node.blobs.read_to_bytes(*hash).await?;
+        let s = std::str::from_utf8(&content).context("unable to parse blob as as utf-8 string")?;
+        println!("{s}");
     }
 
     Ok(())

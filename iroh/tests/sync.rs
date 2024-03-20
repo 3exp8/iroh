@@ -16,7 +16,6 @@ use iroh::{
 use iroh_net::key::{PublicKey, SecretKey};
 use quic_rpc::transport::misc::DummyServerEndpoint;
 use rand::{CryptoRng, Rng, SeedableRng};
-use tokio_util::task::LocalPoolHandle;
 use tracing::{debug, info};
 use tracing_subscriber::{prelude::*, EnvFilter};
 
@@ -32,10 +31,7 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 fn test_node(
     secret_key: SecretKey,
 ) -> Builder<iroh_bytes::store::mem::Store, store::memory::Store, DummyServerEndpoint> {
-    let db = iroh_bytes::store::mem::Store::new();
-    let store = iroh_sync::store::memory::Store::default();
-    Node::builder(db, store)
-        .local_pool(&LocalPoolHandle::new(1))
+    Node::memory()
         .secret_key(secret_key)
         .derp_mode(DerpMode::Disabled)
 }
@@ -239,7 +235,10 @@ async fn sync_full_basic() -> Result<()> {
     let mut rng = test_rng(b"sync_full_basic");
     setup_logging();
     let mut nodes = spawn_nodes(2, &mut rng).await?;
-    let mut clients = nodes.iter().map(|node| node.client()).collect::<Vec<_>>();
+    let mut clients = nodes
+        .iter()
+        .map(|node| node.client().clone())
+        .collect::<Vec<_>>();
 
     // peer0: create doc and ticket
     let peer0 = nodes[0].node_id();
@@ -327,7 +326,7 @@ async fn sync_full_basic() -> Result<()> {
 
     info!("peer2: spawn");
     nodes.push(spawn_node(nodes.len(), &mut rng).await?);
-    clients.push(nodes.last().unwrap().client());
+    clients.push(nodes.last().unwrap().client().clone());
     let doc2 = clients[2].docs.import(ticket).await?;
     let peer2 = nodes[2].node_id();
     let mut events2 = doc2.subscribe().await?;
@@ -859,9 +858,7 @@ impl PartialEq<ExpectedEntry> for (Entry, Bytes) {
 
 #[tokio::test]
 async fn doc_delete() -> Result<()> {
-    let db = iroh_bytes::store::mem::Store::new();
-    let store = iroh_sync::store::memory::Store::default();
-    let node = Node::builder(db, store)
+    let node = Node::memory()
         .gc_policy(iroh::node::GcPolicy::Interval(Duration::from_millis(100)))
         .spawn()
         .await?;
