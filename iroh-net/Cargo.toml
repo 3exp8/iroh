@@ -1,6 +1,6 @@
 [package]
 name = "iroh-net"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 readme = "README.md"
 description = "networking support for iroh"
@@ -35,7 +35,7 @@ http-body-util = "0.1.0"
 hyper = { version = "1", features = ["server", "client", "http1"] }
 hyper-util = "0.1.1"
 igd = { version = "0.12.1", features = ["aio"] }
-iroh-base = { version = "0.12.0", path = "../iroh-base", features = ["key"] }
+iroh-base = { version = "0.13.0", path = "../iroh-base", features = ["key"] }
 libc = "0.2.139"
 num_enum = "0.7"
 once_cell = "1.18.0"
@@ -72,7 +72,7 @@ webpki = { package = "rustls-webpki", version = "0.101.4", features = ["std"] }
 webpki-roots = "0.25"
 x509-parser = "0.15"
 
-# derper
+# iroh-relay
 clap = { version = "4", features = ["derive"], optional = true }
 regex = { version = "1.7.1", optional = true }
 rustls-pemfile = { version = "1.0.2", optional = true }
@@ -81,7 +81,7 @@ toml = { version = "0.8", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 
 # metrics
-iroh-metrics = { version = "0.12.0", path = "../iroh-metrics", default-features = false }
+iroh-metrics = { version = "0.13.0", path = "../iroh-metrics", default-features = false }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 netlink-packet-core = "0.7.0"
@@ -116,12 +116,12 @@ duct = "0.13.6"
 
 [features]
 default = ["metrics"]
-derper = ["clap", "toml", "rustls-pemfile", "regex", "serde_with", "tracing-subscriber"]
+iroh-relay = ["clap", "toml", "rustls-pemfile", "regex", "serde_with", "tracing-subscriber"]
 metrics = ["iroh-metrics/metrics"]
 
 [[bin]]
-name = "derper"
-required-features = ["derper"]
+name = "iroh-relay"
+required-features = ["iroh-relay"]
 
 [[example]]
 name = "listen"
