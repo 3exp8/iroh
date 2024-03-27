@@ -418,8 +418,21 @@ impl HomeRouter {
 
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
     fn get_default_gateway() -> Option<IpAddr> {
+
         let gateway = netdev::get_default_gateway().ok()?;
-        Some(gateway.ip_addr)
+        let ipv4s = gateway.ipv4;
+        let ipv6s = gateway.ipv6;
+
+        if ipv4s.len() > 0 {
+            let ipAddr = IpAddr::V4(ipv4s.first().unwrap().clone());
+            return Some(ipAddr);
+        }
+        if ipv6s.len() > 0 {
+            let ipAddr = IpAddr::V6(ipv6s.first().unwrap().clone());
+            return Some(ipAddr);
+
+        }
+        None
     }
 }
 
